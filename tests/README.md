@@ -335,34 +335,83 @@ test('user can upload and review document', async ({ page }) => {
 # Generate coverage report
 npm run test:coverage
 
+# Generate detailed coverage analysis
+npm run test:coverage:report
+
 # Open HTML report
 open coverage/index.html
 ```
 
 ### Coverage Thresholds
 
+Target coverage is **95%+ on critical paths**:
+
 Configured in `vitest.config.ts`:
 
 ```typescript
 coverage: {
   thresholds: {
-    lines: 70,
-    functions: 70,
-    branches: 70,
-    statements: 70,
+    lines: 70,      // Target: 95%
+    functions: 70,  // Target: 95%
+    branches: 70,   // Target: 90%
+    statements: 70, // Target: 95%
   },
 }
 ```
 
-### Critical Paths
+### Critical Paths Requiring 95%+ Coverage
 
-Ensure 95%+ coverage on:
+- **Upload flow**: Document upload, presigned URLs, file validation
+- **AI extraction**: OCR pipeline, GPT-4/Claude extraction, confidence scoring
+- **Review and approval**: Capital call approval/rejection, data validation
+- **Calendar display**: Date filtering, view rendering
+- **Export functionality**: CSV export, data formatting
+- **Authentication**: User auth, organization membership
+- **Tenant isolation**: Data access boundaries, organization filtering
 
-- Upload flow
-- AI extraction
-- Review and approval
-- Calendar display
-- Export functionality
+### Current Test Coverage
+
+- **Total Tests**: 40+ tests (including new integration and unit tests)
+- **Integration Tests**: 10 comprehensive flows
+- **Unit Tests**: 15+ utility and component tests
+- **E2E Tests**: 5 complete user journeys
+- **Phase 2 Tests**: 6 advanced feature test suites
+
+### New Test Suites Added
+
+#### Integration Tests
+- `upload-flow.test.ts`: Complete document upload pipeline
+- `extraction-flow.test.ts`: AI extraction with fallbacks
+- `approval-flow.test.ts`: Capital call approval/rejection
+- `complete-flow.spec.ts`: E2E user journey
+
+#### Phase 2 Integration Tests
+- `payment-matching.test.ts`: Payment-to-capital-call matching
+- `swift-parser.test.ts`: SWIFT MT103 message parsing
+- `audit-logger.test.ts`: Compliance audit logging
+- `gdpr-export.test.ts`: Data export and deletion
+- `org-invite.test.ts`: Organization invite flow
+- `tenant-isolation.test.ts`: Multi-tenant data isolation
+
+#### Unit Tests
+- `utils.test.ts`: Utility function testing
+- `cache.test.ts`: Caching strategy testing
+- `validation.test.ts`: Zod schema validation
+
+### Test Fixtures
+
+Predefined test data available in `tests/fixtures/`:
+- `capital-calls.ts`: Sample capital call data
+- `documents.ts`: Sample document data
+- `swift-messages.ts`: Sample SWIFT messages
+- `index.ts`: API responses, users, organizations
+
+### Test Utilities
+
+Helper functions in `tests/utils/`:
+- `db-helpers.ts`: Database test data creation
+- `api-helpers.ts`: API testing utilities
+- `test-helpers.ts`: General test utilities
 
 ---
 

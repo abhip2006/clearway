@@ -48,12 +48,12 @@ export default async function CalendarPage() {
   const capitalCalls = await getCapitalCalls();
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight mb-2">
+    <div className="container mx-auto py-4 sm:py-8 px-4">
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
           Capital Call Calendar
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-sm sm:text-base text-muted-foreground">
           View and manage all your upcoming capital calls
         </p>
       </div>
@@ -70,17 +70,17 @@ export default async function CalendarPage() {
 
           {/* Upcoming Capital Calls List */}
           <div>
-            <h2 className="text-xl font-semibold mb-4">Upcoming Capital Calls</h2>
-            <div className="space-y-4">
+            <h2 className="text-lg sm:text-xl font-semibold mb-4">Upcoming Capital Calls</h2>
+            <div className="space-y-3 sm:space-y-4">
               {capitalCalls
                 .filter((call) => new Date(call.dueDate) >= new Date())
                 .slice(0, 5)
                 .map((call) => (
                   <div
                     key={call.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border rounded-lg hover:bg-accent transition-colors gap-2"
                   >
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium">{call.fundName}</p>
                       <p className="text-sm text-muted-foreground">
                         Due: {new Date(call.dueDate).toLocaleDateString('en-US', {
@@ -90,7 +90,7 @@ export default async function CalendarPage() {
                         })}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <p className="font-semibold">
                         ${call.amountDue.toLocaleString()}
                       </p>

@@ -1,90 +1,90 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Upload, FileUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUploadQueue, validateFiles } from '@/lib/upload-queue';
+import { toast } from '@/lib/toast';
 
 interface UploadDropzoneProps {
   onUploadComplete?: (documentId: string) => void;
   onUploadError?: (error: Error) => void;
+  disabled?: boolean;
 }
 
-export function UploadDropzone({ onUploadComplete, onUploadError }: UploadDropzoneProps) {
-  const [uploading, setUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+export function UploadDropzone({ onUploadComplete, onUploadError, disabled = false }: UploadDropzoneProps) {
+  const { files, addFiles } = useUploadQueue();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-
-    setUploading(true);
-    setUploadStatus('idle');
-    setErrorMessage('');
-
-    try {
-      for (const file of acceptedFiles) {
-        // Step 1: Get presigned URL from API
-        const uploadResponse = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileSize: file.size,
-            mimeType: file.type,
-          }),
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to get upload URL');
-        }
-
-        const { uploadUrl, documentId } = await uploadResponse.json();
-
-        // Step 2: Upload directly to S3/R2
-        const s3Response = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: file,
-          headers: {
-            'Content-Type': file.type,
-          },
-        });
-
-        if (!s3Response.ok) {
-          throw new Error('Failed to upload file');
-        }
-
-        // Step 3: Trigger processing
-        const processResponse = await fetch('/api/process', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ documentId }),
-        });
-
-        if (!processResponse.ok) {
-          throw new Error('Failed to trigger processing');
-        }
-
-        setUploadStatus('success');
-        onUploadComplete?.(documentId);
+  // Notify parent component when uploads complete
+  useEffect(() => {
+    const completedFiles = files.filter((f) => f.status === 'complete' && f.documentId);
+    completedFiles.forEach((file) => {
+      if (file.documentId) {
+        onUploadComplete?.(file.documentId);
       }
-    } catch (error) {
-      console.error('Upload error:', error);
-      setUploadStatus('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Upload failed');
-      onUploadError?.(error instanceof Error ? error : new Error('Upload failed'));
-    } finally {
-      setUploading(false);
-    }
-  }, [onUploadComplete, onUploadError]);
+    });
+  }, [files, onUploadComplete]);
+
+  // Notify parent component of errors
+  useEffect(() => {
+    const errorFiles = files.filter((f) => f.status === 'error');
+    errorFiles.forEach((file) => {
+      if (file.error) {
+        onUploadError?.(new Error(file.error));
+      }
+    });
+  }, [files, onUploadError]);
+
+  const onDrop = useCallback(
+    async (acceptedFiles: File[], rejectedFiles: any[]) => {
+      // Handle rejected files
+      if (rejectedFiles.length > 0) {
+        rejectedFiles.forEach((rejected) => {
+          const errors = rejected.errors.map((e: any) => e.message).join(', ');
+          toast.error('File rejected', `${rejected.file.name}: ${errors}`);
+        });
+      }
+
+      if (acceptedFiles.length === 0) return;
+
+      // Validate files
+      const validation = validateFiles(acceptedFiles);
+      if (!validation.valid) {
+        validation.errors.forEach((error) => {
+          toast.error('Invalid file', error);
+        });
+        return;
+      }
+
+      try {
+        // Add files to queue
+        addFiles(acceptedFiles);
+
+        toast.success(
+          'Files added to queue',
+          `${acceptedFiles.length} file${acceptedFiles.length > 1 ? 's' : ''} will be uploaded`
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to add files';
+        toast.error('Upload error', message);
+      }
+    },
+    [addFiles]
+  );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'] },
     maxSize: 10 * 1024 * 1024, // 10MB
+    maxFiles: 10,
     multiple: true,
-    disabled: uploading,
+    disabled: disabled,
   });
+
+  const hasActiveUploads = files.some(
+    (f) => f.status === 'uploading' || f.status === 'processing'
+  );
 
   return (
     <div
@@ -92,50 +92,38 @@ export function UploadDropzone({ onUploadComplete, onUploadError }: UploadDropzo
       className={cn(
         'border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-all',
         'hover:border-primary hover:bg-primary/5',
-        isDragActive && 'border-primary bg-primary/10',
+        isDragActive && 'border-primary bg-primary/10 scale-[1.02]',
         isDragReject && 'border-destructive bg-destructive/10',
-        uploading && 'opacity-50 cursor-not-allowed',
+        disabled && 'opacity-50 cursor-not-allowed',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
       )}
       aria-label="Upload PDF documents"
       role="button"
-      tabIndex={0}
+      tabIndex={disabled ? -1 : 0}
     >
       <input {...getInputProps()} aria-label="File input" />
 
       <div className="flex flex-col items-center gap-4">
-        {uploading ? (
-          <Loader2 className="h-12 w-12 text-primary animate-spin" aria-hidden="true" />
-        ) : uploadStatus === 'success' ? (
-          <CheckCircle className="h-12 w-12 text-green-500" aria-hidden="true" />
-        ) : uploadStatus === 'error' ? (
-          <XCircle className="h-12 w-12 text-destructive" aria-hidden="true" />
+        {isDragActive ? (
+          <FileUp className="h-12 w-12 text-primary animate-bounce" aria-hidden="true" />
         ) : (
           <Upload className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
         )}
 
         <div>
           <p className="text-lg font-medium">
-            {uploading
-              ? 'Uploading...'
-              : uploadStatus === 'success'
-              ? 'Upload successful!'
-              : uploadStatus === 'error'
-              ? 'Upload failed'
-              : isDragActive
+            {isDragActive
               ? 'Drop files here'
+              : hasActiveUploads
+              ? 'Drop more files or click to browse'
               : 'Drag & drop PDFs here'}
           </p>
-          {uploadStatus === 'idle' && !uploading && (
-            <p className="text-sm text-muted-foreground mt-2">
-              or click to browse (max 10MB per file)
-            </p>
-          )}
-          {uploadStatus === 'error' && errorMessage && (
-            <p className="text-sm text-destructive mt-2" role="alert">
-              {errorMessage}
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground mt-2">
+            or click to browse (max 10 files, 10MB each)
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Supports parallel uploads with progress tracking
+          </p>
         </div>
       </div>
     </div>

@@ -1,40 +1,33 @@
 import { PDFViewer } from '@/components/pdf-viewer';
 import { ExtractionForm } from '@/components/extraction-form';
 import { notFound, redirect } from 'next/navigation';
+import { auth } from '@clerk/nextjs/server';
+import { db } from '@/lib/db';
 
-// This would fetch from your database in production
-async function getDocument(id: string) {
-  // TODO: Replace with actual database query
-  // const document = await db.document.findUnique({
-  //   where: { id },
-  //   include: { capitalCall: true },
-  // });
-  // if (!document) {
-  //   notFound();
-  // }
-  // return document;
+async function getDocument(id: string, clerkUserId: string) {
+  const user = await db.user.findUnique({
+    where: { clerkId: clerkUserId },
+  });
 
-  // Mock data for now
-  return {
-    id,
-    fileName: 'Sample Capital Call.pdf',
-    fileUrl: '/sample.pdf', // Replace with actual S3/R2 URL
-    capitalCall: {
-      fundName: 'Apollo Fund XI',
-      amountDue: 250000,
-      dueDate: '2025-12-15',
-      currency: 'USD',
-      bankName: 'JPMorgan Chase',
-      accountNumber: 'XXXXX1234',
-      routingNumber: '021000021',
-      wireReference: 'APOLLO-XI-CC-001',
-      confidence: {
-        fundName: 0.95,
-        amountDue: 0.92,
-        dueDate: 0.88,
-      },
+  if (!user) {
+    return null;
+  }
+
+  const document = await db.document.findFirst({
+    where: {
+      id,
+      userId: user.id,
     },
-  };
+    include: {
+      capitalCall: true,
+    },
+  });
+
+  if (!document) {
+    return null;
+  }
+
+  return document;
 }
 
 interface ReviewPageProps {
@@ -42,8 +35,18 @@ interface ReviewPageProps {
 }
 
 export default async function ReviewPage({ params }: ReviewPageProps) {
+  const { userId } = await auth();
+
+  if (!userId) {
+    redirect('/sign-in');
+  }
+
   const { id } = await params;
-  const document = await getDocument(id);
+  const document = await getDocument(id, userId);
+
+  if (!document) {
+    notFound();
+  }
 
   if (!document.capitalCall) {
     return (
@@ -60,43 +63,63 @@ export default async function ReviewPage({ params }: ReviewPageProps) {
 
   async function handleApprove(data: any) {
     'use server';
-    // TODO: Implement approval logic
-    // await db.capitalCall.update({
-    //   where: { documentId: id },
-    //   data: { ...data, status: 'APPROVED', approvedAt: new Date() },
-    // });
-    // await db.document.update({
-    //   where: { id },
-    //   data: { status: 'APPROVED' },
-    // });
-    console.log('Approved:', data);
+    if (!document.capitalCall) {
+      throw new Error('No capital call to approve');
+    }
+
+    await db.capitalCall.update({
+      where: { id: document.capitalCall.id },
+      data: {
+        ...data,
+        status: 'APPROVED',
+        reviewedAt: new Date(),
+        approvedAt: new Date(),
+      },
+    });
+
+    await db.document.update({
+      where: { id },
+      data: { status: 'APPROVED' },
+    });
+
     redirect('/dashboard/calendar');
   }
 
   async function handleReject() {
     'use server';
-    // TODO: Implement rejection logic
-    // await db.document.update({
-    //   where: { id },
-    //   data: { status: 'REJECTED' },
-    // });
-    console.log('Rejected');
+    if (!document.capitalCall) {
+      await db.document.update({
+        where: { id },
+        data: { status: 'REJECTED' },
+      });
+    } else {
+      await db.capitalCall.update({
+        where: { id: document.capitalCall.id },
+        data: { status: 'REJECTED', reviewedAt: new Date() },
+      });
+
+      await db.document.update({
+        where: { id },
+        data: { status: 'REJECTED' },
+      });
+    }
+
     redirect('/upload');
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-screen">
-      {/* Left: PDF Viewer */}
-      <div className="border-r h-full overflow-hidden">
+    <div className="flex flex-col lg:grid lg:grid-cols-2 gap-0 min-h-screen lg:h-screen">
+      {/* Left: PDF Viewer - Stack vertically on mobile */}
+      <div className="border-b lg:border-b-0 lg:border-r h-[50vh] lg:h-full overflow-hidden">
         <PDFViewer url={document.fileUrl} />
       </div>
 
       {/* Right: Extraction Form */}
-      <div className="p-6 overflow-y-auto h-full bg-background">
+      <div className="p-4 sm:p-6 overflow-y-auto lg:h-full bg-background">
         <div className="max-w-2xl mx-auto">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold mb-2">Review Extraction</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl sm:text-2xl font-bold mb-2">Review Extraction</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               Review the extracted data and make any necessary corrections
             </p>
           </div>

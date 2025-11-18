@@ -130,9 +130,158 @@ See [agents/README.md](./agents/README.md) for details.
 
 **At 25% market share = $107M ARR = $1B+ valuation**
 
-## Getting Started
+## Phase 2 Features (Complete)
 
-See [Clearway_MVP_Build_Plan.md](./Clearway_MVP_Build_Plan.md) for detailed development instructions.
+In addition to the MVP features, Clearway now includes:
+
+### Fund Administrator Integrations
+- ✅ SS&C Geneva integration
+- ✅ Carta webhook integration
+- ✅ Investor mapping and auto-sync
+- 🚧 Juniper Square (in progress)
+
+### Payment Reconciliation
+- ✅ Automatic payment matching (90%+ accuracy)
+- ✅ SWIFT message parsing
+- ✅ ACH transaction processing
+- ✅ Bank statement upload
+
+### Accounting & E-Signature
+- ✅ QuickBooks Online integration
+- ✅ DocuSign integration
+- ✅ Journal entry automation
+- ✅ Payment sync
+
+### Enterprise Features
+- ✅ Multi-tenant organizations
+- ✅ Custom roles (RBAC)
+- ✅ SSO (SAML/OIDC)
+- ✅ Advanced audit logging
+- ✅ GDPR compliance tools
+
+### Analytics & Reporting
+- ✅ Dashboard analytics
+- ✅ AI-powered forecasting
+- ✅ Pattern detection
+- ✅ Scheduled reports
+
+---
+
+## Documentation
+
+### User Guides
+- **[Getting Started Guide](docs/user-guide/GETTING_STARTED.md)** - Complete onboarding for new users
+- **[Admin Guide](docs/user-guide/ADMIN_GUIDE.md)** - Organization management, security, team administration
+- **[Payment Reconciliation](docs/user-guide/PAYMENT_RECONCILIATION.md)** - SWIFT, ACH, bank statement processing
+
+### Integration Guides
+- **[Fund Administrator Setup](docs/integrations/FUND_ADMIN_SETUP.md)** - SS&C Geneva, Carta, Juniper Square
+- **[QuickBooks Setup](docs/integrations/QUICKBOOKS_SETUP.md)** - Accounting integration guide
+- **[DocuSign Setup](docs/integrations/DOCUSIGN_SETUP.md)** - E-signature integration
+
+### Developer Documentation
+- **[Developer Setup](docs/development/SETUP.md)** - Local development environment setup
+- **[API Reference](docs/api/API_REFERENCE.md)** - Complete API documentation
+- **[Webhook Guide](docs/api/WEBHOOKS.md)** - Real-time event notifications
+- **[Deployment Guide](docs/deployment/DEPLOYMENT.md)** - Production deployment on Vercel
+
+### Architecture & Security
+- **[System Architecture](docs/architecture/SYSTEM_ARCHITECTURE.md)** - Technical architecture overview
+- **[Security Documentation](docs/security/SECURITY.md)** - Security best practices, compliance
+- **[Contributing Guide](docs/CONTRIBUTING.md)** - How to contribute to Clearway
+- **[Release Notes](docs/RELEASE_NOTES.md)** - Version history and changelog
+- **[FAQ](docs/FAQ.md)** - Frequently asked questions
+
+---
+
+## Quick Start
+
+### For Users
+
+1. **Sign up**: https://clearway.com
+2. **Upload a document**: Drag and drop your capital call PDF
+3. **Review extraction**: Verify AI-extracted data (95%+ accuracy)
+4. **Approve**: Capital call syncs to your systems automatically
+
+See [Getting Started Guide](docs/user-guide/GETTING_STARTED.md) for detailed instructions.
+
+### For Developers
+
+1. **Clone repository**:
+   ```bash
+   git clone https://github.com/clearway/clearway.git
+   cd clearway
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your credentials
+   ```
+
+4. **Initialize database**:
+   ```bash
+   npm run db:push
+   npm run db:seed
+   ```
+
+5. **Start development server**:
+   ```bash
+   npm run dev
+   ```
+
+See [Developer Setup Guide](docs/development/SETUP.md) for complete setup instructions.
+
+### For API Integration
+
+```typescript
+import Clearway from '@clearway/node';
+
+const clearway = new Clearway('sk_live_...');
+
+// Create capital call
+const capitalCall = await clearway.capitalCalls.create({
+  fundName: 'Acme Ventures Fund III',
+  investorEmail: 'investor@example.com',
+  amountDue: 100000.00,
+  dueDate: '2025-02-15'
+});
+
+// List capital calls
+const calls = await clearway.capitalCalls.list({
+  status: 'APPROVED',
+  limit: 10
+});
+```
+
+See [API Reference](docs/api/API_REFERENCE.md) for complete API documentation.
+
+---
+
+## Support
+
+### Community
+- **Documentation**: https://docs.clearway.com
+- **Community Slack**: https://clearway-community.slack.com
+- **Office Hours**: Fridays 2-3pm EST
+
+### Contact
+- **Email**: support@clearway.com
+- **Developer Support**: dev@clearway.com
+- **Security Issues**: security@clearway.com
+- **Sales**: sales@clearway.com
+
+### Resources
+- **Status Page**: https://status.clearway.com
+- **Changelog**: https://clearway.com/changelog
+- **API Status**: https://api-status.clearway.com
+
+---
 
 ## License
 
