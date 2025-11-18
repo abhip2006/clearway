@@ -1,0 +1,41 @@
+# Test artifacts and generated files
+
+# Vitest
+coverage/
+.vitest/
+*.log
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Performance
+tests/performance/metrics.json
+tests/performance/report.md
+
+# AI Accuracy
+tests/accuracy/results.json
+tests/accuracy/accuracy-report.json
+scripts/accuracy-report.json
+
+# Lighthouse
+.lighthouseci/
+lighthouse-report/
+
+# Test fixtures (large files)
+tests/e2e/fixtures/*.pdf
+tests/e2e/fixtures/*.docx
+tests/accuracy/fixtures/*.pdf
+
+# Keep README files for fixtures
+!tests/e2e/fixtures/README.md
+!tests/accuracy/fixtures/README.md
+
+# MSW
+public/mockServiceWorker.js
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store

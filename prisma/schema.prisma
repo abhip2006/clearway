@@ -1,0 +1,164 @@
+// Clearway Database Schema
+// Database Agent - Task DB-001
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & ORGANIZATION MODELS
+// ============================================
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
+
+  documents    Document[]
+  capitalCalls CapitalCall[]
+
+  @@index([clerkId])
+  @@index([email])
+  @@index([organizationId])
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  documents Document[]
+
+  @@index([slug])
+}
+
+// ============================================
+// DOCUMENT MODELS
+// ============================================
+
+model Document {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileUrl     String   // S3/R2 URL
+  fileSize    Int      // bytes
+  mimeType    String   @default("application/pdf")
+  uploadedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Ownership
+  userId         String
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Processing status
+  status DocumentStatus @default(PENDING)
+
+  // Relations
+  capitalCall CapitalCall?
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([uploadedAt(sort: Desc)])
+}
+
+enum DocumentStatus {
+  PENDING      // Uploaded, not processed
+  PROCESSING   // AI extraction in progress
+  REVIEW       // Needs human review
+  APPROVED     // Reviewed and approved
+  REJECTED     // Rejected by user
+  FAILED       // Processing failed
+}
+
+// ============================================
+// CAPITAL CALL MODELS
+// ============================================
+
+model CapitalCall {
+  id        String   @id @default(cuid())
+
+  // Extracted fields
+  fundName         String
+  investorEmail    String?
+  investorAccount  String?
+  amountDue        Decimal  @db.Decimal(15, 2) // Use Decimal for money
+  currency         String   @default("USD")
+  dueDate          DateTime
+
+  // Wire instructions
+  bankName         String?
+  accountNumber    String?
+  routingNumber    String?
+  wireReference    String?
+
+  // Metadata
+  extractedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Confidence scores (0-1)
+  confidenceScores Json?
+
+  // Raw extraction for debugging
+  rawExtraction    Json?
+
+  // Relations
+  documentId String @unique
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId     String
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status     CapitalCallStatus @default(PENDING_REVIEW)
+
+  @@index([userId])
+  @@index([dueDate])
+  @@index([status])
+  @@index([fundName])
+}
+
+enum CapitalCallStatus {
+  PENDING_REVIEW // Extracted, waiting for review
+  APPROVED       // Reviewed and approved
+  REJECTED       // Rejected by user
+  PAID           // Future: payment tracking
+}
+
+// ============================================
+// FUND ADMINISTRATOR MODELS (Phase 2)
+// ============================================
+
+model FundAdministrator {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  apiKey      String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Metadata
+  contactEmail String?
+  website      String?
+
+  @@index([apiKey])
+  @@index([slug])
+}

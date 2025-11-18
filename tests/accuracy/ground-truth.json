@@ -1,0 +1,77 @@
+[
+  {
+    "documentId": "doc_test_001",
+    "fileName": "sample-capital-call-apollo.pdf",
+    "expected": {
+      "fundName": "Apollo Fund XI",
+      "amountDue": 250000,
+      "dueDate": "2025-12-31",
+      "investorEmail": "john.smith@example.com",
+      "investorAccount": "ACC-123456",
+      "bankName": "JP Morgan Chase Bank",
+      "accountNumber": "9876543210",
+      "routingNumber": "021000021",
+      "wireReference": "APOLLO-XI-CC-2025-Q4"
+    }
+  },
+  {
+    "documentId": "doc_test_002",
+    "fileName": "sample-capital-call-blackstone.pdf",
+    "expected": {
+      "fundName": "Blackstone Fund XIV",
+      "amountDue": 500000,
+      "dueDate": "2026-01-15",
+      "investorEmail": "jane.doe@example.com",
+      "investorAccount": "BS-789012",
+      "bankName": "Bank of America",
+      "accountNumber": "1234567890",
+      "routingNumber": "026009593",
+      "wireReference": "BS-XIV-2026-Q1"
+    }
+  },
+  {
+    "documentId": "doc_test_003",
+    "fileName": "sample-capital-call-kkr.pdf",
+    "expected": {
+      "fundName": "KKR Global Infrastructure Fund III",
+      "amountDue": 750000,
+      "dueDate": "2025-11-30",
+      "investorEmail": "robert.johnson@example.com",
+      "investorAccount": "KKR-345678",
+      "bankName": "Citibank",
+      "accountNumber": "5555666677",
+      "routingNumber": "021000089",
+      "wireReference": "KKR-GIF-III-2025"
+    }
+  },
+  {
+    "documentId": "doc_test_004",
+    "fileName": "sample-capital-call-carlyle.pdf",
+    "expected": {
+      "fundName": "Carlyle Partners VIII",
+      "amountDue": 1000000,
+      "dueDate": "2026-03-01",
+      "investorEmail": "sarah.williams@example.com",
+      "investorAccount": "CAR-901234",
+      "bankName": "Wells Fargo",
+      "accountNumber": "9999888877",
+      "routingNumber": "121000248",
+      "wireReference": "CP-VIII-2026-Q1"
+    }
+  },
+  {
+    "documentId": "doc_test_005",
+    "fileName": "sample-capital-call-missing-wire.pdf",
+    "expected": {
+      "fundName": "Vista Equity Partners Fund VII",
+      "amountDue": 350000,
+      "dueDate": "2025-12-15",
+      "investorEmail": "michael.brown@example.com",
+      "investorAccount": "VEP-567890",
+      "bankName": null,
+      "accountNumber": null,
+      "routingNumber": null,
+      "wireReference": null
+    }
+  }
+]
