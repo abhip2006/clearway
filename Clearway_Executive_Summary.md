@@ -2,7 +2,7 @@
 ## Data Infrastructure for Alternative Investments
 
 **Date:** November 18, 2025  
-**Status:** Seeking $5M Seed at $20M Post
+ 
 
 ---
 
