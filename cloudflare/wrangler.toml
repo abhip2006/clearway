@@ -1,0 +1,46 @@
+# Cloudflare Workers Configuration
+# Performance & Scaling Agent - Task PERF-003
+
+name = "clearway-edge-cache"
+main = "worker.ts"
+compatibility_date = "2024-01-01"
+account_id = "YOUR_ACCOUNT_ID"  # Replace with your Cloudflare account ID
+
+# Workers AI/KV/Durable Objects configuration
+kv_namespaces = [
+  { binding = "EDGE_CACHE", id = "YOUR_KV_ID" }  # Replace with your KV namespace ID
+]
+
+# Environment variables
+[env.production]
+vars = {
+  API_URL = "https://clearway.com",
+  CACHE_VERSION = "v1"
+}
+
+[env.staging]
+vars = {
+  API_URL = "https://staging.clearway.com",
+  CACHE_VERSION = "v1-staging"
+}
+
+# Route configuration
+[[env.production.routes]]
+pattern = "clearway.com/api/public/*"
+zone_name = "clearway.com"
+
+[[env.production.routes]]
+pattern = "clearway.com/_next/static/*"
+zone_name = "clearway.com"
+
+[[env.production.routes]]
+pattern = "clearway.com/static/*"
+zone_name = "clearway.com"
+
+# Build configuration
+[build]
+command = "tsc worker.ts --outDir dist --target ES2020 --module ES2020"
+
+# Limits
+[limits]
+cpu_ms = 50

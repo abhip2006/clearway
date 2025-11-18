@@ -31,7 +31,6 @@ model User {
   bankAccounts     BankAccount[]
   scheduledReports ScheduledReport[]
   members          OrganizationMember[]
-  investorMappings InvestorMapping[]
 
   @@index([clerkId])
   @@index([email])
@@ -58,7 +57,6 @@ model Organization {
   roles                  OrganizationRole[]
   ssoConnections         SSOConnection[]
   capitalCalls           CapitalCall[]
-  fundAdminConnections   FundAdminConnection[]
 
   @@index([slug])
   @@index([customDomain])
@@ -128,10 +126,6 @@ model CapitalCall {
   // Payment tracking
   paidAt           DateTime?
 
-  // Source tracking
-  source           String?  // SSC_GENEVA, CARTA, DOCUMENT_UPLOAD, etc.
-  externalId       String?  // ID from external system
-
   // Metadata
   extractedAt  DateTime  @default(now())
   reviewedAt   DateTime?
@@ -164,8 +158,6 @@ model CapitalCall {
   @@index([dueDate])
   @@index([status])
   @@index([fundName])
-  @@index([source])
-  @@index([externalId])
 }
 
 enum CapitalCallStatus {
@@ -196,109 +188,6 @@ model FundAdministrator {
   @@index([slug])
 }
 
-
-model FundAdminConnection {
-  id             String   @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-
-  administrator  String   // SSC_GENEVA, CARTA, JUNIPER_SQUARE, ALTVIA, ALLVUE
-  accountId      String   // Account ID with that administrator
-
-  credentials    Json     // Encrypted credentials
-  syncEnabled    Boolean  @default(true)
-  status         String   @default("ACTIVE") // ACTIVE, DISABLED, ERROR
-
-  lastSyncAt     DateTime?
-  lastSyncStatus String?  // SUCCESS, PARTIAL_FAILURE, FAILURE
-
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([administrator, accountId])
-  @@index([organizationId])
-}
-
-model InvestorMapping {
-  id                  String   @id @default(cuid())
-  fundAdministrator   String
-  externalInvestorId  String
-
-  userId              String
-  user                User @relation(fields: [userId], references: [id])
-
-  investorName        String
-  email               String
-  commitment          Decimal? @db.Decimal(15, 2)
-
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@unique([fundAdministrator, externalInvestorId])
-  @@index([userId])
-}
-
-model FundMapping {
-  id                  String   @id @default(cuid())
-  fundAdministrator   String
-  externalFundCode    String
-
-  fundName            String
-  fundType            String?
-  vintage             Int?
-
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@unique([fundAdministrator, externalFundCode])
-}
-
-model FundAdminSync {
-  id              String   @id @default(cuid())
-  administrator   String
-  accountId       String
-  syncType        String   // CAPITAL_CALLS, INVESTORS, etc.
-
-  totalRecords    Int
-  successCount    Int
-  failureCount    Int
-  errors          Json?
-
-  syncedAt        DateTime @default(now())
-
-  @@index([administrator, accountId])
-  @@index([syncedAt(sort: Desc)])
-}
-
-model UnmappedInvestor {
-  id                  String   @id @default(cuid())
-  fundAdministrator   String
-  externalInvestorId  String
-
-  investorName        String
-  email               String
-  fundId              String?
-
-  needsMapping        Boolean  @default(true)
-  mappedAt            DateTime?
-
-  createdAt           DateTime @default(now())
-
-  @@index([fundAdministrator, needsMapping])
-}
-
-model WebhookLog {
-  id           String   @id @default(cuid())
-  source       String   // CARTA, SSC_GENEVA, etc.
-  eventType    String
-  eventId      String   @unique
-
-  payload      Json
-  processedAt  DateTime @default(now())
-
-  @@index([source, eventType])
-  @@index([processedAt(sort: Desc)])
-}
 // ============================================
 // ACCOUNTING INTEGRATION MODELS (Phase 2)
 // ============================================

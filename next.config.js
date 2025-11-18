@@ -11,6 +11,74 @@ const nextConfig = {
   images: {
     domains: ['cdn.clearway.com'],
     formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    minimumCacheTTL: 86400, // 24 hours
+  },
+
+  // CDN & Edge Caching Configuration
+  // Performance & Scaling Agent - Task PERF-003
+  async headers() {
+    return [
+      // Public API endpoints - long cache with stale-while-revalidate
+      {
+        source: '/api/public/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800',
+          },
+          {
+            key: 'CDN-Cache-Control',
+            value: 'public, max-age=86400',
+          },
+          {
+            key: 'Vary',
+            value: 'Accept-Encoding',
+          },
+        ],
+      },
+      // Static assets - immutable cache
+      {
+        source: '/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // Next.js images - long cache
+      {
+        source: '/_next/image:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // Next.js static files - long cache
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      // Fonts - long cache
+      {
+        source: '/fonts/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
   },
 
   // Experimental features
