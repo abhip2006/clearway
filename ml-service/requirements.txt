@@ -1,0 +1,13 @@
+# ML Forecasting Service Requirements
+
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+numpy==1.26.3
+
+# For production ML capabilities (optional, not required for basic service)
+# tensorflow==2.15.0
+# scikit-learn==1.4.0
+# prophet==1.1.5
+# xgboost==2.0.3
+# pandas==2.2.0

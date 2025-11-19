@@ -1,0 +1,39 @@
+{
+  "cli": {
+    "version": ">= 5.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "API_URL": "https://dev-api.clearway.app"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "env": {
+        "API_URL": "https://staging-api.clearway.app"
+      }
+    },
+    "production": {
+      "env": {
+        "API_URL": "https://api.clearway.app"
+      },
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "team@clearway.app",
+        "ascAppId": "1234567890",
+        "appleTeamId": "XXXXXXXXXX"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@
 // Database Agent - Task DB-005
 
 import { PrismaClient } from '@prisma/client';
+import { seedGlobalOperations } from './seeds/global-operations-seed';
 
 const prisma = new PrismaClient();
 
@@ -498,6 +499,12 @@ async function main() {
 
   console.log(`   ✅ Created accounting connection: ${accountingConnection.provider}`);
 
+  // ============================================
+  // PHASE 3: GLOBAL OPERATIONS
+  // ============================================
+  console.log('\n🌍 Phase 3: Seeding Global Operations...');
+  await seedGlobalOperations();
+
   console.log('\n🎉 Seeding complete!');
   console.log('\n📊 Summary:');
   console.log('   - Users: 1');
@@ -520,6 +527,11 @@ async function main() {
   console.log('   - Webhook Endpoints: 1');
   console.log('   - Webhook Deliveries: 3');
   console.log('   - Accounting Connections: 1');
+  console.log('\n   Phase 3 Additions:');
+  console.log('   - Currencies: 20+');
+  console.log('   - Languages: 5');
+  console.log('   - Exchange Rates: Sample rates');
+  console.log('   - Compliance Regions: 3 (UK, EU, APAC)');
 }
 
 main()

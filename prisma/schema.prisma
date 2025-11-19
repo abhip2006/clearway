@@ -25,13 +25,15 @@ model User {
   organization   Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?
 
-  documents        Document[]
-  capitalCalls     CapitalCall[]
-  payments         Payment[]
-  bankAccounts     BankAccount[]
-  scheduledReports ScheduledReport[]
-  members          OrganizationMember[]
-  investorMappings InvestorMapping[]
+  documents          Document[]
+  capitalCalls       CapitalCall[]
+  payments           Payment[]
+  bankAccounts       BankAccount[]
+  scheduledReports   ScheduledReport[]
+  members            OrganizationMember[]
+  investorMappings   InvestorMapping[]
+  whiteLabelTenants  WhiteLabelTenant[] @relation("WhiteLabelTenants")
+  taxProfile         TaxProfile?
 
   @@index([clerkId])
   @@index([email])
@@ -59,6 +61,20 @@ model Organization {
   ssoConnections         SSOConnection[]
   capitalCalls           CapitalCall[]
   fundAdminConnections   FundAdminConnection[]
+
+  // Phase 3: Workflow Automation
+  customFields           CustomField[]
+  workflows              Workflow[]
+  workflowTemplates      WorkflowTemplate[]
+  tags                   Tag[]
+
+  // Phase 3: Tax & K-1
+  cpaAccess              CPAAccess[]
+
+  // Phase 3: Distribution Agent
+  funds                  Fund[]
+  investors              Investor[]
+  distributions          Distribution[]
 
   @@index([slug])
   @@index([customDomain])
@@ -88,6 +104,7 @@ model Document {
 
   // Relations
   capitalCall CapitalCall?
+  taxDocument TaxDocument?
 
   @@index([userId])
   @@index([organizationId])
@@ -654,4 +671,2270 @@ model ReportExecution {
 
   @@index([scheduledReportId])
   @@index([executedAt(sort: Desc)])
+}
+
+// ============================================
+// WORKFLOW AUTOMATION MODELS (Phase 3)
+// ============================================
+
+model CustomField {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  entityType            String   // CAPITAL_CALL, DOCUMENT, DISTRIBUTION, PAYMENT
+  name                  String
+  description           String?
+  fieldType             String   // TEXT, NUMBER, DATE, SELECT, etc.
+
+  required              Boolean  @default(false)
+  defaultValue          Json?
+
+  validation            Json?    // minLength, maxLength, pattern, etc.
+  displaySettings       Json?    // groupName, position, readOnly, etc.
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  customFieldValues     CustomFieldValue[]
+
+  @@unique([organizationId, entityType, name])
+  @@index([organizationId])
+}
+
+model CustomFieldValue {
+  id                    String   @id @default(cuid())
+  customFieldId         String
+  customField           CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  entityType            String
+  entityId              String
+
+  value                 Json
+  createdBy             String
+  updatedBy             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([customFieldId, entityType, entityId])
+  @@index([customFieldId])
+  @@index([entityType, entityId])
+}
+
+model Workflow {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name                  String
+  description           String?
+
+  trigger               Json     // { type, config }
+  branches              Json     // Array of branch definitions
+  defaultActions        Json?    // Array of default actions
+
+  enabled               Boolean  @default(false)
+  version               Int      @default(1)
+
+  templateId            String?
+  template              WorkflowTemplate? @relation(fields: [templateId], references: [id])
+
+  createdBy             String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  executions            WorkflowExecution[]
+  versions              WorkflowVersion[]
+
+  @@index([organizationId])
+  @@index([enabled])
+}
+
+model WorkflowVersion {
+  id                    String   @id @default(cuid())
+  workflowId            String
+  workflow              Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  version               Int
+  definition            Json     // Full workflow definition snapshot
+
+  archivedBy            String
+  archivedAt            DateTime @default(now())
+
+  @@index([workflowId])
+}
+
+model WorkflowExecution {
+  id                    String   @id @default(cuid())
+  workflowId            String
+  workflow              Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  status                String   // PENDING, RUNNING, SUCCEEDED, FAILED
+  triggerType           String
+  entityType            String
+  entityId              String
+
+  triggerData           Json?
+  userId                String?
+
+  workflowRunId         String?
+  error                 String?
+
+  startedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime @default(now())
+
+  actionLogs            WorkflowActionLog[]
+
+  @@index([workflowId])
+  @@index([status])
+  @@index([entityType, entityId])
+}
+
+model WorkflowActionLog {
+  id                    String   @id @default(cuid())
+  executionId           String
+  execution             WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  actionId              String
+  actionType            String
+  status                String   // SUCCESS, FAILED
+  error                 String?
+  duration              Int      // milliseconds
+
+  createdAt             DateTime @default(now())
+
+  @@index([executionId])
+  @@index([status])
+}
+
+model WorkflowTemplate {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name                  String
+  description           String?
+  category              String   // 'payments', 'distributions', 'compliance'
+  industry              String?  // 'PE', 'VC', 'RI', 'Hedge'
+
+  trigger               Json
+  branches              Json
+  defaultActions        Json?
+
+  usageCount            Int      @default(0)
+  rating                Float    @default(0)
+  isPublic              Boolean  @default(false)
+
+  createdBy             String
+  createdAt             DateTime @default(now())
+
+  workflows             Workflow[]
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([industry])
+}
+
+model ApprovalTask {
+  id                    String   @id @default(cuid())
+  entityType            String
+  entityId              String
+  description           String
+
+  status                String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  requiredApprovals     Int
+  approversCount        Int      @default(0)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([status])
+  @@index([entityType, entityId])
+}
+
+model Tag {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name                  String
+  color                 String
+
+  createdAt             DateTime @default(now())
+
+  entityTags            EntityTag[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model EntityTag {
+  id                    String   @id @default(cuid())
+  entityType            String
+  entityId              String
+  tagId                 String
+  tag                   Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  createdAt             DateTime @default(now())
+
+  @@unique([entityType, entityId, tagId])
+  @@index([tagId])
+  @@index([entityType, entityId])
+}
+
+// ============================================
+// WHITE-LABEL PLATFORM MODELS (Phase 3)
+// ============================================
+
+// White-label tenant management
+model WhiteLabelTenant {
+  id              String   @id @default(cuid())
+  fundAdminId     String
+  fundAdmin       User     @relation("WhiteLabelTenants", fields: [fundAdminId], references: [id])
+
+  slug            String   @unique
+  subdomain       String   @unique
+  customDomain    String?  @unique
+  status          String   @default("ACTIVE") // ACTIVE, PAUSED, SUSPENDED
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  pausedAt        DateTime?
+
+  // Relations
+  brandingConfig  BrandingConfig?
+  ssoConfig       SSOConfig?
+  emailTemplates  EmailTemplate[]
+  users           TenantUser[]
+  apiKeys         APIKey[]
+  auditLogs       TenantAuditLog[]
+  apiUsageLogs    APIUsageLog[]
+
+  // Billing
+  plan            String   @default("STARTER") // STARTER, PROFESSIONAL, ENTERPRISE
+  monthlyAPIQuota Int      @default(10000)
+
+  @@index([fundAdminId])
+  @@index([status])
+  @@index([subdomain])
+  @@index([customDomain])
+}
+
+// Branding configuration
+model BrandingConfig {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  tenant            WhiteLabelTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Colors
+  primaryColor      String   @default("#0066FF")
+  secondaryColor    String   @default("#00D9FF")
+  accentColor       String   @default("#FF6B35")
+
+  // Images
+  logoUrl           String?
+  faviconUrl        String?
+  emailHeaderColor  String   @default("#0066FF")
+  emailLogoUrl      String?
+
+  // Typography
+  fontFamily        String   @default("Inter")
+
+  // Custom CSS
+  customCss         String?  @db.Text
+
+  // Contact Info
+  companyName       String?
+  supportEmail      String?
+  supportPhone      String?
+  footerText        String?  @db.Text
+  fromEmail         String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+// SSO Configuration for white-label tenants
+model SSOConfig {
+  id                String   @id @default(cuid())
+  tenantId          String   @unique
+  tenant            WhiteLabelTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  provider          String   // SAML, OIDC, OAUTH
+  name              String
+  enabled           Boolean  @default(true)
+
+  // SAML specific
+  metadataUrl       String?
+  metadataXml       String?  @db.Text
+
+  // OIDC specific
+  clientId          String?
+  clientSecret      String?
+  discoveryUrl      String?
+
+  // Config
+  config            Json
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+// Email Templates
+model EmailTemplate {
+  id                String   @id @default(cuid())
+  tenantId          String?
+  tenant            WhiteLabelTenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  type              String   // CAPITAL_CALL_CREATED, CAPITAL_CALL_APPROVED, etc.
+  subject           String
+  htmlBody          String   @db.Text
+  textBody          String?  @db.Text
+
+  isDefault         Boolean  @default(false)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, type])
+  @@index([tenantId])
+  @@index([type])
+  @@index([isDefault])
+}
+
+// Tenant Users
+model TenantUser {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            WhiteLabelTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  email             String
+  name              String?
+  externalId        String?  // From SSO provider
+  role              String   @default("INVESTOR") // ADMIN, MANAGER, INVESTOR
+
+  lastLoginAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@index([externalId])
+}
+
+// API Keys for white-label tenants
+model APIKey {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            WhiteLabelTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name              String
+  hashedKey         String   @unique
+  scopes            String[]
+
+  expiresAt         DateTime?
+  revokedAt         DateTime?
+  lastUsedAt        DateTime?
+
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([hashedKey])
+}
+
+// Tenant-specific Audit Logs
+model TenantAuditLog {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            WhiteLabelTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId            String?
+
+  action            String   // CREATED, UPDATED, DELETED
+  resource          String   // CapitalCall, Investor, etc.
+  resourceId        String
+  changes           Json?    // What was changed
+
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+}
+
+// API Usage Logs
+model APIUsageLog {
+  id                String   @id @default(cuid())
+  tenantId          String
+  tenant            WhiteLabelTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  endpoint          String
+  method            String
+  statusCode        Int
+  responseTime      Int      // milliseconds
+
+  createdAt         DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ============================================
+// TAX & K-1 MODELS (Phase 3)
+// ============================================
+
+model TaxDocument {
+  id              String   @id @default(cuid())
+  documentId      String   @unique
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  // Tax form details
+  formType        TaxFormType  // K1_1065, K1_1120S, K1_1041, W9, W8BEN, 1099
+  taxYear         Int
+  fundId          String
+  investorId      String
+
+  // K-1 specific fields
+  k1Data          Json?     // All K-1 fields in structured format
+  einOrSsn        String?   // Should be encrypted in production
+  shareOfIncome   Decimal?  @db.Decimal(15, 2)
+  shareOfLoss     Decimal?  @db.Decimal(15, 2)
+  distributions   Decimal?  @db.Decimal(15, 2)
+  capitalGains    Decimal?  @db.Decimal(15, 2)
+  capitalLosses   Decimal?  @db.Decimal(15, 2)
+
+  // Extraction metadata
+  extractionConfidence Float?  // 0-100 confidence score
+  extractedFields Json?        // Field-level confidence scores
+  requiresReview  Boolean @default(false)
+
+  // Status
+  status          TaxDocStatus  // PENDING, VALIDATED, DISTRIBUTED, AMENDED
+  validationErrors Json?
+
+  // Versioning
+  version         Int @default(1)
+  originalId      String?   // If this is an amendment
+  supersededById  String?   // If this version was superseded
+
+  // Compliance
+  distributedAt   DateTime?
+  deliveryStatus  String?   // SENT, DELIVERED, BOUNCED
+  receivedByIRS   Boolean @default(false)
+  receivedAt      DateTime?
+
+  // Audit trail
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  distributions   TaxDistribution[]
+  originalAmendments TaxAmendment[] @relation("Original")
+  amendedAmendments  TaxAmendment[] @relation("Amended")
+
+  @@index([taxYear, formType])
+  @@index([fundId, investorId, taxYear])
+  @@index([status, requiresReview])
+  @@index([distributedAt])
+}
+
+enum TaxFormType {
+  K1_1065       // Partnership
+  K1_1120S      // S-Corporation
+  K1_1041       // Trust/Estate
+  W9            // W-9 Request for TIN
+  W8BEN         // Foreign person
+  W8BEN_E       // Foreign entity
+  I1099_MISC
+  I1099_INT
+  I1099_DIV
+  STATE_K1      // State-specific K-1
+}
+
+enum TaxDocStatus {
+  PENDING_EXTRACTION
+  EXTRACTED
+  PENDING_VALIDATION
+  VALIDATED
+  PENDING_DISTRIBUTION
+  DISTRIBUTED
+  AMENDED
+  SUPERSEDED
+}
+
+model TaxProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Tax identification
+  taxIdType       String   // SSN, EIN, ITIN
+  taxId           String   // Should be encrypted in production
+
+  // W-9 information
+  w9Received      Boolean @default(false)
+  w9Date          DateTime?
+  w9DocumentId    String?
+  w9Verified      Boolean @default(false)
+
+  // Entity type
+  entityType      String   // INDIVIDUAL, PARTNERSHIP, CORPORATION, TRUST, etc.
+  backupWithholding Boolean @default(false)
+
+  // Foreign investor
+  isForeign       Boolean @default(false)
+  countryOfTaxResidence String?
+  w8FormType      String?  // W8BEN or W8BEN_E
+  w8Date          DateTime?
+  w8ExpiresAt     DateTime?
+
+  // Preferences
+  preferredFormat String   @default("PDF") // PDF, TURBOTAX, HR_BLOCK
+  cpaEmail        String?
+  cpaCopiesEnabled Boolean @default(false)
+  emailNotifications Boolean @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isForeign, w8ExpiresAt])
+}
+
+model TaxDistribution {
+  id              String   @id @default(cuid())
+  taxDocumentId   String
+  taxDocument     TaxDocument @relation(fields: [taxDocumentId], references: [id], onDelete: Cascade)
+
+  recipientEmail  String
+  recipientName   String?
+  sentAt          DateTime
+  deliveryStatus  String   // SENT, DELIVERED, FAILED, BOUNCED
+  openedAt        DateTime?
+  downloadedAt    DateTime?
+
+  remindersSent   Int @default(0)
+  lastReminderAt  DateTime?
+
+  // Audit
+  sendMethod      String   // EMAIL, CPA_PORTAL, DOWNLOAD
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([taxDocumentId])
+  @@index([deliveryStatus])
+  @@index([sentAt(sort: Desc)])
+}
+
+model CPAAccess {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  cpaFirmName     String
+  cpaEmail        String
+  cpaPhone        String?
+
+  accessLevel     String   // READ_ONLY, FULL_ACCESS
+  grantedAt       DateTime @default(now())
+  expiresAt       DateTime?
+
+  // Access tracking
+  documentsAccessed Int @default(0)
+  lastAccessedAt  DateTime?
+
+  // IP whitelist (optional)
+  allowedIps      String[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([organizationId, cpaEmail])
+  @@index([expiresAt])
+}
+
+model TaxAmendment {
+  id              String   @id @default(cuid())
+  originalDocId   String
+  originalDoc     TaxDocument @relation("Original", fields: [originalDocId], references: [id], onDelete: Cascade)
+
+  amendedDocId    String
+  amendedDoc      TaxDocument @relation("Amended", fields: [amendedDocId], references: [id], onDelete: Cascade)
+
+  amendmentReason String
+  filedDate       DateTime
+  receivedDate    DateTime?
+
+  investorNotified Boolean @default(false)
+  notifiedAt      DateTime?
+
+  createdAt       DateTime @default(now())
+
+  @@unique([originalDocId, amendedDocId])
+  @@index([originalDocId])
+  @@index([amendedDocId])
+}
+
+// ============================================
+// DISTRIBUTION AGENT MODELS (Phase 3)
+// ============================================
+
+model Fund {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  fundCode        String   @unique
+  fundType        String?  // PE, VC, HEDGE, RE
+  vintage         Int?
+  currency        String   @default("USD")
+
+  aum             Decimal? @db.Decimal(20, 2)
+  nav             Decimal? @db.Decimal(20, 8)
+  ytdReturn       Decimal? @db.Decimal(8, 4)
+
+  status          String   @default("ACTIVE") // ACTIVE, CLOSED, LIQUIDATING
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  distributions      Distribution[]
+  navSnapshots       NavSnapshot[]
+  forecasts          DistributionForecast[]
+  investorPreferences InvestorPreference[]
+  positions          Position[]
+  analytics          FundAnalytics[]
+
+  @@index([organizationId])
+  @@index([fundCode])
+  @@index([status])
+}
+
+model Investor {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  email           String
+  phoneNumber     String?
+  taxId           String?
+
+  userId          String?  // Link to User if they have portal access
+
+  status          String   @default("ACTIVE")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  distributionLines     DistributionLine[]
+  distributionPayments  DistributionPayment[]
+  reinvestmentTxns      ReinvestmentTransaction[]
+  preferences           InvestorPreference[]
+  positions             Position[]
+  notifications         Notification[]
+  bankAccounts          InvestorBankAccount[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([userId])
+}
+
+model Distribution {
+  id                String   @id @default(cuid())
+  fundId            String
+  organizationId    String
+  fund              Fund     @relation(fields: [fundId], references: [id])
+
+  distributionDate  DateTime
+  recordDate        DateTime
+  payableDate       DateTime
+
+  totalAmount       Decimal  @db.Decimal(15, 2)
+  currency          String   @default("USD")
+
+  status            String   @default("DRAFT") // DRAFT, READY, APPROVED, PROCESSING, COMPLETED, CANCELLED
+  description       String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  lines             DistributionLine[]
+  payments          DistributionPayment[]
+  notifications     Notification[]
+  reinvestmentTxns  ReinvestmentTransaction[]
+
+  @@index([fundId])
+  @@index([organizationId])
+  @@index([payableDate])
+  @@index([status])
+}
+
+model DistributionLine {
+  id                       String       @id @default(cuid())
+  distributionId           String
+  investorId               String
+  distribution             Distribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  investor                 Investor     @relation(fields: [investorId], references: [id])
+
+  totalAmount              Decimal      @db.Decimal(15, 2)
+  dividendAmount           Decimal      @db.Decimal(15, 2) @default(0)
+  returnOfCapitalAmount    Decimal      @db.Decimal(15, 2) @default(0)
+  gainAmount               Decimal      @db.Decimal(15, 2) @default(0)
+
+  status                   String       @default("PENDING") // PENDING, PAYMENT_INITIATED, PAID, REINVESTED, FAILED
+
+  // Reinvestment fields
+  reinvestmentAmount       Decimal?     @db.Decimal(15, 2)
+  reinvestmentShares       Decimal?     @db.Decimal(20, 8)
+  reinvestmentNavPrice     Decimal?     @db.Decimal(15, 8)
+  reinvestmentDate         DateTime?
+
+  // Payment fields
+  paymentAmount            Decimal?     @db.Decimal(15, 2)
+
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+
+  @@unique([distributionId, investorId])
+  @@index([investorId])
+  @@index([status])
+}
+
+model DistributionPayment {
+  id                    String       @id @default(cuid())
+  distributionId        String
+  investorId            String
+  distribution          Distribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  investor              Investor     @relation(fields: [investorId], references: [id])
+
+  amount                Decimal      @db.Decimal(15, 2)
+  paymentMethod         String       // ACH, WIRE, CHECK
+  externalTransactionId String?      @unique
+
+  status                String       @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+
+  attemptCount          Int          @default(0)
+  failureReason         String?
+  failureDetails        Json?
+
+  recordedAt            DateTime
+  paidAt                DateTime?
+
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  failureLogs           PaymentFailureLog[]
+
+  @@index([distributionId])
+  @@index([investorId])
+  @@index([status])
+  @@index([paidAt])
+}
+
+model ReinvestmentTransaction {
+  id              String       @id @default(cuid())
+  distributionId  String
+  investorId      String
+  distribution    Distribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  investor        Investor     @relation(fields: [investorId], references: [id])
+
+  amount          Decimal      @db.Decimal(15, 2)
+  shares          Decimal      @db.Decimal(20, 8)
+  navPrice        Decimal      @db.Decimal(15, 8)
+
+  transactionDate DateTime
+  status          String       @default("COMPLETED")
+
+  createdAt       DateTime     @default(now())
+
+  @@index([distributionId])
+  @@index([investorId])
+}
+
+model PaymentFailureLog {
+  id                      String              @id @default(cuid())
+  distributionPaymentId   String
+  payment                 DistributionPayment @relation(fields: [distributionPaymentId], references: [id], onDelete: Cascade)
+
+  failureReason           String
+  attemptNumber           Int
+  failedAt                DateTime
+
+  @@index([distributionPaymentId])
+  @@index([failedAt])
+}
+
+model DistributionForecast {
+  id                String   @id @default(cuid())
+  fundId            String
+  fund              Fund     @relation(fields: [fundId], references: [id])
+
+  forecastDate      DateTime
+  baseCaseAmount    Decimal  @db.Decimal(15, 2)
+  baseCaseConfidence Float   @default(0.85)
+
+  bullCaseAmount    Decimal? @db.Decimal(15, 2)
+  bearCaseAmount    Decimal? @db.Decimal(15, 2)
+
+  reasoning         String?
+  createdAt         DateTime @default(now())
+
+  @@index([fundId])
+  @@index([forecastDate])
+}
+
+model Notification {
+  id                String       @id @default(cuid())
+  investorId        String
+  distributionId    String
+  investor          Investor     @relation(fields: [investorId], references: [id])
+  distribution      Distribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+
+  type              String       // DISTRIBUTION_NOTICE, PAYMENT_CONFIRMATION, TAX_SUMMARY, PAYMENT_FAILED
+  channel           String       // EMAIL, SMS, IN_APP
+  status            String       @default("PENDING") // PENDING, SENT, FAILED, BOUNCED
+
+  sentAt            DateTime?
+  readAt            DateTime?
+
+  createdAt         DateTime     @default(now())
+
+  @@index([investorId])
+  @@index([distributionId])
+  @@index([status])
+}
+
+model InAppNotification {
+  id            String   @id @default(cuid())
+  userId        String
+
+  title         String
+  message       String
+  type          String
+  relatedId     String?
+
+  read          Boolean  @default(false)
+  readAt        DateTime?
+
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([read])
+}
+
+model NavSnapshot {
+  id          String   @id @default(cuid())
+  fundId      String
+  fund        Fund     @relation(fields: [fundId], references: [id])
+
+  asOfDate    DateTime
+  navPerShare Decimal  @db.Decimal(15, 8)
+
+  createdAt   DateTime @default(now())
+
+  @@unique([fundId, asOfDate])
+  @@index([fundId])
+  @@index([asOfDate])
+}
+
+model InvestorPreference {
+  id                            String   @id @default(cuid())
+  investorId                    String
+  fundId                        String
+  investor                      Investor @relation(fields: [investorId], references: [id])
+  fund                          Fund     @relation(fields: [fundId], references: [id])
+
+  reinvestmentPreference        String   @default("CASH") // CASH, AUTOMATIC, PARTIAL
+  partialReinvestmentPercentage Decimal? @db.Decimal(5, 2)
+
+  emailNotifications            Boolean  @default(true)
+  smsNotifications              Boolean  @default(false)
+
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  @@unique([investorId, fundId])
+  @@index([investorId])
+  @@index([fundId])
+}
+
+model Position {
+  id               String   @id @default(cuid())
+  investorId       String
+  fundId           String
+  investor         Investor @relation(fields: [investorId], references: [id])
+  fund             Fund     @relation(fields: [fundId], references: [id])
+
+  quantity         Decimal  @db.Decimal(20, 8)
+  costBasis        Decimal  @db.Decimal(15, 2)
+  acquisitionDate  DateTime
+
+  source           String   // INITIAL_INVESTMENT, REINVESTMENT, TRANSFER
+  sourceId         String?
+
+  createdAt        DateTime @default(now())
+
+  @@index([investorId])
+  @@index([fundId])
+  @@index([acquisitionDate])
+}
+
+model FundAnalytics {
+  id            String   @id @default(cuid())
+  fundId        String
+  fund          Fund     @relation(fields: [fundId], references: [id])
+
+  asOfDate      DateTime
+
+  aum           Decimal  @db.Decimal(20, 2)
+  nav           Decimal  @db.Decimal(20, 8)
+  monthlyReturn Decimal? @db.Decimal(8, 4)
+  ytdReturn     Decimal? @db.Decimal(8, 4)
+  volatility    Decimal? @db.Decimal(8, 4)
+  sharpeRatio   Decimal? @db.Decimal(8, 4)
+
+  createdAt     DateTime @default(now())
+
+  @@unique([fundId, asOfDate])
+  @@index([fundId])
+  @@index([asOfDate])
+}
+
+model InvestorBankAccount {
+  id                String   @id @default(cuid())
+  investorId        String
+  investor          Investor @relation(fields: [investorId], references: [id])
+
+  accountName       String
+  accountNumber     String   // Encrypted
+  routingNumber     String   // Encrypted
+  accountType       String   // CHECKING, SAVINGS
+  accountHolderName String
+
+  isDefault         Boolean  @default(false)
+  isVerified        Boolean  @default(false)
+
+  plaidAccountId    String?
+
+  status            String   @default("ACTIVE")
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([investorId])
+}
+
+// ============================================
+// API MARKETPLACE MODELS (Phase 3)
+// ============================================
+
+model DeveloperAccount {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  companyName           String?
+  website               String?
+  verified              Boolean  @default(false)
+
+  // Stats
+  totalApps             Int      @default(0)
+  totalInstalls         Int      @default(0)
+  totalRevenue          Decimal  @db.Decimal(15, 2) @default(0)
+
+  // Payout
+  payoutMethod          String?  // BANK_TRANSFER, PAYPAL, STRIPE
+  payoutDetails         Json?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  marketplaceAPIKeys    MarketplaceAPIKey[]
+  oauthClients          MarketplaceOAuthClient[]
+  apps                  MarketplaceApp[]
+  webhookSubscriptions  MarketplaceWebhookSubscription[]
+
+  @@index([verified])
+  @@index([userId])
+}
+
+model MarketplaceAPIKey {
+  id                    String   @id @default(cuid())
+  developerId           String
+  developer             DeveloperAccount @relation(fields: [developerId], references: [id], onDelete: Cascade)
+
+  name                  String
+  keyPrefix             String
+  keyHash               String   @unique
+  secretHash            String
+
+  scopes                String[]
+
+  rateLimitId           String?
+  rateLimit             MarketplaceRateLimit? @relation(fields: [rateLimitId], references: [id])
+
+  lastUsedAt            DateTime?
+  expiresAt             DateTime?
+  isActive              Boolean  @default(true)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  usageLogs             MarketplaceAPIUsageLog[]
+
+  @@index([developerId])
+  @@index([keyPrefix])
+  @@index([isActive])
+}
+
+model MarketplaceRateLimit {
+  id                    String   @id @default(cuid())
+  tier                  String
+
+  requestsPerSecond     Int
+  requestsPerDay        Int
+  requestsPerMonth      Int
+  concurrentRequests    Int
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  apiKeys               MarketplaceAPIKey[]
+  subscriptions         MarketplaceSubscriptionPlan[]
+
+  @@index([tier])
+}
+
+model MarketplaceSubscriptionPlan {
+  id                    String   @id @default(cuid())
+  name                  String
+  tier                  String   @unique
+
+  monthlyPrice          Decimal  @db.Decimal(10, 2)
+  annualPrice           Decimal  @db.Decimal(10, 2)
+
+  rateLimitId           String
+  rateLimit             MarketplaceRateLimit @relation(fields: [rateLimitId], references: [id])
+
+  features              Json
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  subscriptions         MarketplaceUserSubscription[]
+
+  @@index([tier])
+}
+
+model MarketplaceUserSubscription {
+  id                    String   @id @default(cuid())
+  userId                String
+
+  planId                String
+  plan                  MarketplaceSubscriptionPlan @relation(fields: [planId], references: [id])
+
+  status                String   @default("ACTIVE")
+
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+
+  canceledAt            DateTime?
+  autoRenew             Boolean  @default(true)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  invoices              MarketplaceBillingInvoice[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model MarketplaceBillingInvoice {
+  id                    String   @id @default(cuid())
+  userId                String
+
+  subscriptionId        String
+  subscription          MarketplaceUserSubscription @relation(fields: [subscriptionId], references: [id])
+
+  amount                Decimal  @db.Decimal(10, 2)
+  currency              String   @default("USD")
+
+  status                String   @default("DRAFT")
+
+  periodStart           DateTime
+  periodEnd             DateTime
+  dueDate               DateTime
+  paidAt                DateTime?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([subscriptionId])
+}
+
+model MarketplaceApp {
+  id                    String   @id @default(cuid())
+  developerId           String
+  developer             DeveloperAccount @relation(fields: [developerId], references: [id], onDelete: Cascade)
+
+  name                  String
+  slug                  String   @unique
+  description           String
+  longDescription       String   @db.Text
+
+  category              String
+  icon                  String?
+
+  status                String   @default("DRAFT")
+  version               String   @default("1.0.0")
+
+  rating                Float    @default(0)
+  reviewCount           Int      @default(0)
+  installCount          Int      @default(0)
+
+  priceModel            String   @default("FREE")
+
+  features              String[]
+  permissions           String[]
+
+  documentationUrl      String?
+  supportUrl            String?
+
+  publishedAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  oauthClient           MarketplaceOAuthClient?
+  pricing               MarketplaceAppPricing?
+  reviews               MarketplaceAppReview[]
+  installations         MarketplaceAppInstallation[]
+
+  @@index([developerId])
+  @@index([status])
+  @@index([category])
+  @@fulltext([name, description])
+}
+
+model MarketplaceAppPricing {
+  id                    String   @id @default(cuid())
+  appId                 String   @unique
+  app                   MarketplaceApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  priceModel            String
+  basePrice             Decimal? @db.Decimal(10, 2)
+  perUnitPrice          Decimal? @db.Decimal(10, 4)
+  freeTierLimit         Int?
+  currency              String   @default("USD")
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model MarketplaceAppReview {
+  id                    String   @id @default(cuid())
+  appId                 String
+  app                   MarketplaceApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  userId                String
+  rating                Int
+  comment               String?  @db.Text
+  helpfulCount          Int      @default(0)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([appId, userId])
+  @@index([appId])
+  @@index([rating])
+}
+
+model MarketplaceAppInstallation {
+  id                    String   @id @default(cuid())
+  appId                 String
+  app                   MarketplaceApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  userId                String
+
+  oauthTokenId          String?
+  oauthToken            MarketplaceOAuthToken? @relation(fields: [oauthTokenId], references: [id])
+
+  configuration         Json?
+  status                String   @default("ACTIVE")
+
+  installedAt           DateTime @default(now())
+  uninstalledAt         DateTime?
+
+  @@unique([appId, userId])
+  @@index([userId])
+  @@index([status])
+}
+
+model MarketplaceOAuthClient {
+  id                    String   @id @default(cuid())
+  developerId           String
+  developer             DeveloperAccount @relation(fields: [developerId], references: [id], onDelete: Cascade)
+
+  appId                 String   @unique
+  app                   MarketplaceApp @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  clientId              String   @unique
+  clientSecretHash      String
+
+  redirectUris          String[]
+  scopes                String[]
+
+  tokenEndpointAuthMethod String @default("client_secret_basic")
+  accessTokenLifetime   Int      @default(3600)
+  refreshTokenLifetime  Int      @default(2592000)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  tokens                MarketplaceOAuthToken[]
+
+  @@index([developerId])
+  @@index([clientId])
+}
+
+model MarketplaceOAuthToken {
+  id                    String   @id @default(cuid())
+  oauthClientId         String
+  oauthClient           MarketplaceOAuthClient @relation(fields: [oauthClientId], references: [id], onDelete: Cascade)
+
+  userId                String
+
+  accessTokenHash       String   @unique
+  refreshTokenHash      String?
+
+  scopes                String[]
+
+  issuedAt              DateTime @default(now())
+  expiresAt             DateTime
+  revokedAt             DateTime?
+
+  installations         MarketplaceAppInstallation[]
+
+  @@index([oauthClientId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model MarketplaceWebhookSubscription {
+  id                    String   @id @default(cuid())
+  developerId           String
+  developer             DeveloperAccount @relation(fields: [developerId], references: [id], onDelete: Cascade)
+
+  url                   String
+  events                String[]
+  secretHash            String
+
+  isActive              Boolean  @default(true)
+
+  maxRetries            Int      @default(5)
+  backoffMultiplier     Float    @default(2.0)
+  initialDelayMs        Int      @default(1000)
+
+  headers               Json?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  events_sent           MarketplaceWebhookEvent[]
+  deliveryLogs          MarketplaceWebhookDeliveryLog[]
+
+  @@index([developerId])
+  @@index([isActive])
+}
+
+model MarketplaceWebhookEvent {
+  id                    String   @id @default(cuid())
+  webhookSubscriptionId String
+  webhookSubscription   MarketplaceWebhookSubscription @relation(fields: [webhookSubscriptionId], references: [id], onDelete: Cascade)
+
+  eventType             String
+  payload               Json
+
+  attempt               Int      @default(1)
+  statusCode            Int?
+  response              String?  @db.Text
+
+  nextRetryAt           DateTime?
+  deliveredAt           DateTime?
+
+  createdAt             DateTime @default(now())
+
+  deliveryLogs          MarketplaceWebhookDeliveryLog[]
+
+  @@index([webhookSubscriptionId])
+  @@index([eventType])
+  @@index([deliveredAt])
+}
+
+model MarketplaceWebhookDeliveryLog {
+  id                    String   @id @default(cuid())
+  webhookSubscriptionId String
+  webhookSubscription   MarketplaceWebhookSubscription @relation(fields: [webhookSubscriptionId], references: [id], onDelete: Cascade)
+
+  webhookEventId        String
+  webhookEvent          MarketplaceWebhookEvent @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
+
+  attemptNumber         Int
+  statusCode            Int?
+  responseTimeMs        Int?
+
+  headersSent           Json?
+  responseBody          String?  @db.Text
+  errorMessage          String?  @db.Text
+
+  deliveredAt           DateTime @default(now())
+
+  @@index([webhookSubscriptionId])
+  @@index([deliveredAt])
+}
+
+model MarketplaceAPIUsageLog {
+  id                    String   @id @default(cuid())
+  apiKeyId              String
+  apiKey                MarketplaceAPIKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  userId                String
+
+  endpoint              String
+  method                String
+  statusCode            Int
+
+  requestTimeMs         Int
+  requestSizeBytes      Int
+  responseSizeBytes     Int
+
+  timestamp             DateTime @default(now())
+
+  @@index([apiKeyId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([endpoint])
+}
+
+model MarketplaceUsageDailySummary {
+  id                    String   @id @default(cuid())
+  userId                String
+  date                  DateTime @db.Date
+
+  requestCount          Int      @default(0)
+  errorCount            Int      @default(0)
+  totalLatencyMs        Int      @default(0)
+  bandwidthBytes        BigInt   @default(0)
+
+  createdAt             DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+// ============================================
+// GLOBAL OPERATIONS MODELS (Phase 3)
+// ============================================
+
+model Currency {
+  id             String   @id @default(cuid())
+  code           String   @unique // USD, EUR, GBP
+  name           String
+  symbol         String
+  decimalPlaces  Int      @default(2)
+  enabled        Boolean  @default(true)
+  isCrypto       Boolean  @default(false)
+  region         String?  // Americas, Europe, APAC
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  exchangeRatesFrom    ExchangeRate[] @relation("FromCurrency")
+  exchangeRatesTo      ExchangeRate[] @relation("ToCurrency")
+  userPreferences      UserLocalePreference[]
+  orgPrimaryCurrency   OrganizationLocaleSettings[] @relation("PrimaryCurrency")
+  orgTaxCurrency       OrganizationLocaleSettings[] @relation("TaxCurrency")
+  orgSettlementCurrency OrganizationLocaleSettings[] @relation("SettlementCurrency")
+  fundBaseCurrency     FundsMultiCurrency[] @relation("BaseCurrency")
+  fundNavCurrency      FundsMultiCurrency[] @relation("NavCurrency")
+  transactionsFrom     TransactionsMultiCurrency[] @relation("TransactionCurrency")
+  transactionsTo       TransactionsMultiCurrency[] @relation("BaseCurrency")
+
+  @@index([code])
+  @@index([enabled])
+}
+
+model ExchangeRate {
+  id                String   @id @default(cuid())
+  fromCurrencyId    String
+  fromCurrency      Currency @relation("FromCurrency", fields: [fromCurrencyId], references: [id])
+  toCurrencyId      String
+  toCurrency        Currency @relation("ToCurrency", fields: [toCurrencyId], references: [id])
+
+  rate              Decimal  @db.Decimal(20, 8)
+  rateTimestamp     DateTime
+  source            String?  // fixer.io, openexchangerates, ECB
+  isMidMarket       Boolean  @default(true)
+  confidenceScore   Decimal? @db.Decimal(3, 2) // 0.00 to 1.00
+
+  createdAt         DateTime @default(now())
+
+  @@unique([fromCurrencyId, toCurrencyId, rateTimestamp])
+  @@index([fromCurrencyId, toCurrencyId])
+  @@index([rateTimestamp(sort: Desc)])
+}
+
+model Language {
+  id                String   @id @default(cuid())
+  code              String   @unique // en, es, fr, de, zh-CN
+  name              String   // English, Español, Français
+  nativeName        String   // English, Español, Français
+  rtl               Boolean  @default(false)
+  enabled           Boolean  @default(true)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  userPreferences   UserLocalePreference[]
+  orgPrimaryLanguage OrganizationLocaleSettings[] @relation("PrimaryLanguage")
+  translationStrings TranslationString[]
+
+  @@index([code])
+  @@index([enabled])
+}
+
+model UserLocalePreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  languageId        String
+  language          Language @relation(fields: [languageId], references: [id])
+  currencyId        String
+  currency          Currency @relation(fields: [currencyId], references: [id])
+
+  timezone          String?  // America/New_York, Europe/London
+  dateFormat        String?  // dd/MM/yyyy, MM/dd/yyyy, yyyy-MM-dd
+  numberFormat      String?  // en-US (1,000.50), de-DE (1.000,50)
+  localeCountry     String?  // US, GB, FR, DE, CN
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([languageId])
+  @@index([currencyId])
+}
+
+model OrganizationLocaleSettings {
+  id                       String   @id @default(cuid())
+  organizationId           String   @unique
+
+  primaryCurrencyId        String
+  primaryCurrency          Currency @relation("PrimaryCurrency", fields: [primaryCurrencyId], references: [id])
+  secondaryCurrencies      String[] // array of currency IDs
+
+  primaryLanguageId        String
+  primaryLanguage          Language @relation("PrimaryLanguage", fields: [primaryLanguageId], references: [id])
+  supportedLanguages       String[] // array of language IDs
+
+  complianceRegion         String?  // UK, EU, APAC
+  headquartersTimezone     String?
+
+  taxReportingCurrencyId   String?
+  taxReportingCurrency     Currency? @relation("TaxCurrency", fields: [taxReportingCurrencyId], references: [id])
+
+  settlementCurrencyId     String?
+  settlementCurrency       Currency? @relation("SettlementCurrency", fields: [settlementCurrencyId], references: [id])
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([primaryCurrencyId])
+  @@index([primaryLanguageId])
+  @@index([complianceRegion])
+}
+
+model FundsMultiCurrency {
+  id                            String   @id @default(cuid())
+  fundId                        String   @unique
+
+  baseCurrencyId                String
+  baseCurrency                  Currency @relation("BaseCurrency", fields: [baseCurrencyId], references: [id])
+  additionalCurrencies          String[] // array of currency IDs
+
+  navCalculationCurrencyId      String?
+  navCalculationCurrency        Currency? @relation("NavCurrency", fields: [navCalculationCurrencyId], references: [id])
+  performanceReportingCurrencies String[] // array of currency IDs
+
+  historicalFxRates             Json?    // { "USD/EUR": {...}, "GBP/USD": {...} }
+  rebalancingThreshold          Decimal? @db.Decimal(5, 2) // percentage
+  lastRebalance                 DateTime?
+
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+
+  @@index([fundId])
+  @@index([baseCurrencyId])
+}
+
+model ComplianceRegion {
+  id                        String   @id @default(cuid())
+  regionCode                String   @unique // UK, EU, APAC
+  regionName                String
+  regulationFramework       String   // FCA, MiFID II, ASIC
+
+  dataResidencyRequired     Boolean  @default(false)
+  dataResidencyCountries    String?  // comma-separated
+  requiresLocalAudit        Boolean  @default(false)
+  auditLanguage             String?
+
+  taxReportingRequired      Boolean  @default(false)
+  withholdingTaxApplicable  Boolean  @default(false)
+  standardWithholdingRate   Decimal? @db.Decimal(5, 2)
+
+  businessDays              Json?    // days of week that are business days
+  holidays                  Json?    // regional holidays
+  kycRequirements           Json?    // region-specific KYC fields
+  amlThresholds             Decimal? @db.Decimal(20, 2) // reporting threshold
+
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  businessDayCalendars      BusinessDayCalendar[]
+
+  @@index([regionCode])
+}
+
+model BusinessDayCalendar {
+  id                String   @id @default(cuid())
+  regionId          String
+  region            ComplianceRegion @relation(fields: [regionId], references: [id])
+
+  year              Int
+  day               DateTime @db.Date
+  dayType           String   // business_day, holiday, weekend, settlement_day
+  dayName           String?  // for reference
+  localName         String?  // holiday name in local language
+
+  isSettlementDay   Boolean  @default(false)
+  settlementTPlus   Int      @default(2) // T+2 standard
+
+  createdAt         DateTime @default(now())
+
+  @@unique([regionId, year, day])
+  @@index([regionId, year])
+  @@index([day])
+}
+
+model TranslationString {
+  id                String   @id @default(cuid())
+  namespace         String   // documents, funds, settings
+  keyPath           String   // document.upload.success
+  languageId        String
+  language          Language @relation(fields: [languageId], references: [id])
+
+  translationText   String   @db.Text
+  isDefault         Boolean  @default(false)
+  translatorNotes   String?  @db.Text
+  reviewStatus      String   @default("pending") // pending, approved, rejected
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([namespace, keyPath, languageId])
+  @@index([namespace, languageId])
+  @@index([reviewStatus])
+}
+
+model TransactionsMultiCurrency {
+  id                      String   @id @default(cuid())
+  transactionId           String   @unique
+  fundId                  String
+
+  transactionDate         DateTime @db.Date
+  transactionAmount       Decimal  @db.Decimal(20, 8)
+  transactionCurrencyId   String
+  transactionCurrency     Currency @relation("TransactionCurrency", fields: [transactionCurrencyId], references: [id])
+
+  baseCurrencyId          String
+  baseCurrency            Currency @relation("BaseCurrency", fields: [baseCurrencyId], references: [id])
+  baseCurrencyAmount      Decimal  @db.Decimal(20, 8)
+
+  exchangeRateUsed        Decimal  @db.Decimal(20, 8)
+  exchangeRateSource      String?
+  exchangeRateTimestamp   DateTime?
+  valuationDate           DateTime? @db.Date
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([fundId])
+  @@index([transactionDate])
+  @@index([transactionCurrencyId])
+}
+
+model RegionalAuditLog {
+  id                    String   @id @default(cuid())
+  eventType             String
+  userId                String?
+  organizationId        String?
+  regionCode            String?
+
+  actionDescription     String   @db.Text
+  complianceRelevance   String?  // tax, audit, regulation
+  languageCode          String?  // language of the log entry
+  supportingDocuments   Json?
+
+  createdAt             DateTime @default(now())
+
+  @@index([organizationId, regionCode, createdAt(sort: Desc)])
+  @@index([eventType, createdAt(sort: Desc)])
+}
+// ============================================
+// INVESTOR PORTAL MODELS (Phase 3)
+// ============================================
+
+enum InvestorEntityType {
+  INDIVIDUAL
+  LLC
+  CORPORATION
+  TRUST
+  PARTNERSHIP
+  OTHER
+}
+
+enum AccreditedStatus {
+  ACCREDITED
+  UNACCREDITED
+  PENDING_VERIFICATION
+}
+
+enum CommunicationFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  ON_DEMAND
+}
+
+enum InvestorStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  TERMINATED
+}
+
+model Investor {
+  id                        String              @id @default(cuid())
+  email                     String              @unique
+  legalName                 String
+  entityType                InvestorEntityType  @default(INDIVIDUAL)
+  taxId                     String?             // Encrypted SSN or EIN
+  accreditedStatus          AccreditedStatus    @default(PENDING_VERIFICATION)
+  accreditationVerifiedDate DateTime?
+  accreditationExpiryDate   DateTime?
+  phoneNumber               String?
+  secondaryContactName      String?
+  secondaryContactEmail     String?
+  secondaryContactPhone     String?
+  preferredLanguage         String              @default("en")
+  preferredTimezone         String              @default("America/New_York")
+  communicationFrequency    CommunicationFrequency @default(DAILY)
+  mailingAddress            String?             @db.Text
+  status                    InvestorStatus      @default(ACTIVE)
+
+  createdAt                 DateTime            @default(now())
+  updatedAt                 DateTime            @updatedAt
+
+  // Relations
+  authentication            InvestorAuthentication[]
+  sessions                  InvestorSession[]
+  fundParticipations        InvestorFundParticipation[]
+  capitalCallStatuses       InvestorCapitalCallStatus[]
+  distributions             InvestorDistribution[]
+  taxDocuments              InvestorTaxDocument[]
+  bankAccounts              InvestorBankAccount[]
+  communicationPreferences  InvestorCommunicationPreference?
+  supportTickets            InvestorSupportTicket[]
+  performanceSnapshots      InvestorPerformanceSnapshot[]
+  auditLogs                 InvestorAuditLog[]
+  accessLogs                InvestorAccessAuditLog[]
+
+  @@index([email])
+  @@index([taxId])
+  @@index([status])
+}
+
+enum AuthMethod {
+  EMAIL_MAGIC_LINK
+  SSO_GOOGLE
+  SSO_AZURE
+  SSO_OKTA
+  SAML
+}
+
+enum MFAMethod {
+  TOTP
+  SMS
+  EMAIL
+}
+
+model InvestorAuthentication {
+  id                   String      @id @default(cuid())
+  investorId           String
+  investor             Investor    @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  authMethod           AuthMethod
+  magicLinkTokenHash   String?
+  magicLinkExpiresAt   DateTime?
+  lastLoginDate        DateTime?
+  lastLoginIp          String?
+  lastLoginLocation    String?
+  failedAttempts       Int         @default(0)
+  lockedUntil          DateTime?
+  mfaEnabled           Boolean     @default(false)
+  mfaMethod            MFAMethod?
+  mfaPhoneVerified     String?
+  backupCodes          String[]    // Encrypted array
+  ssoProviderId        String?
+
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  @@unique([investorId, authMethod])
+  @@index([investorId])
+  @@index([magicLinkTokenHash])
+}
+
+model InvestorSession {
+  id                String    @id @default(cuid())
+  investorId        String
+  investor          Investor  @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  sessionTokenHash  String    @unique
+  expiresAt         DateTime
+  ipAddress         String?
+  userAgent         String?   @db.Text
+  deviceFingerprint String?
+  isActive          Boolean   @default(true)
+  lastActivity      DateTime  @default(now())
+
+  createdAt         DateTime  @default(now())
+
+  @@index([investorId])
+  @@index([expiresAt])
+  @@index([lastActivity])
+}
+
+enum ParticipationStatus {
+  ACTIVE
+  INACTIVE
+  LIQUIDATED
+}
+
+model InvestorFundParticipation {
+  id                               String              @id @default(cuid())
+  investorId                       String
+  investor                         Investor            @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  fundId                           String
+  commitmentAmount                 Decimal             @db.Decimal(18, 2)
+  fundedAmount                     Decimal             @default(0) @db.Decimal(18, 2)
+  capitalAccountBalance            Decimal             @default(0) @db.Decimal(18, 2)
+  entryDate                        DateTime
+  status                           ParticipationStatus @default(ACTIVE)
+  suitabilityQuestionnaireCompleted Boolean            @default(false)
+  beneficialOwnershipDisclosed     Boolean            @default(false)
+  sanctionsScreeningPassed         Boolean            @default(false)
+  amlKycVerified                   Boolean            @default(false)
+
+  createdAt                        DateTime            @default(now())
+  updatedAt                        DateTime            @updatedAt
+
+  @@unique([investorId, fundId])
+  @@index([investorId])
+  @@index([fundId])
+  @@index([status])
+}
+
+enum CapitalCallType {
+  STANDARD
+  EMERGENCY
+  SPECIAL
+}
+
+enum FundCapitalCallStatus {
+  ANNOUNCED
+  PENDING
+  FUNDED
+  OVERDUE
+  CANCELLED
+}
+
+model FundCapitalCall {
+  id              String                @id @default(cuid())
+  fundId          String
+  callNumber      Int
+  callDate        DateTime
+  dueDate         DateTime
+  amountPerUnit   Decimal               @db.Decimal(18, 6)
+  totalAmount     Decimal               @db.Decimal(18, 2)
+  callType        CapitalCallType       @default(STANDARD)
+  wireInstructions String?              @db.Text
+  referenceCode   String?
+  status          FundCapitalCallStatus @default(ANNOUNCED)
+
+  createdAt       DateTime              @default(now())
+
+  investorStatuses InvestorCapitalCallStatus[]
+
+  @@index([fundId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+enum InvestorCallStatus {
+  PENDING
+  FUNDED
+  OVERDUE
+  WAIVED
+}
+
+enum PaymentMethod {
+  WIRE
+  ACH
+  CHECK
+  OTHER
+}
+
+model InvestorCapitalCallStatus {
+  id              String              @id @default(cuid())
+  capitalCallId   String
+  capitalCall     FundCapitalCall     @relation(fields: [capitalCallId], references: [id], onDelete: Cascade)
+  investorId      String
+  investor        Investor            @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  investorAmount  Decimal             @db.Decimal(18, 2)
+  amountPaid      Decimal             @default(0) @db.Decimal(18, 2)
+  paymentDate     DateTime?
+  paymentMethod   PaymentMethod?
+  paymentReference String?
+  status          InvestorCallStatus  @default(PENDING)
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([capitalCallId, investorId])
+  @@index([investorId])
+  @@index([status])
+  @@index([paymentDate])
+}
+
+enum DistributionType {
+  INCOME
+  CAPITAL_RETURN
+  SPECIAL
+  DIVIDEND
+}
+
+enum DistributionStatus {
+  PENDING
+  PROCESSED
+  IN_TRANSIT
+  RECEIVED
+}
+
+model Distribution {
+  id                    String              @id @default(cuid())
+  fundId                String
+  distributionDate      DateTime
+  paymentDate           DateTime?
+  distributionType      DistributionType    @default(INCOME)
+  amountPerUnit         Decimal             @db.Decimal(18, 6)
+  totalAmount           Decimal             @db.Decimal(18, 2)
+  ordinaryIncome        Decimal?            @db.Decimal(18, 2)
+  longTermCapitalGain   Decimal?            @db.Decimal(18, 2)
+  shortTermCapitalGain  Decimal?            @db.Decimal(18, 2)
+  returnOfCapital       Decimal?            @db.Decimal(18, 2)
+  recapture             Decimal?            @db.Decimal(18, 2)
+  status                DistributionStatus  @default(PENDING)
+
+  createdAt             DateTime            @default(now())
+
+  investorDistributions InvestorDistribution[]
+
+  @@index([fundId])
+  @@index([distributionDate])
+  @@index([status])
+}
+
+enum DistributionPaymentMethod {
+  WIRE
+  CHECK
+  ACH
+  REINVESTMENT
+}
+
+enum DistributionPaymentStatus {
+  PENDING
+  PROCESSED
+  IN_TRANSIT
+  RECEIVED
+}
+
+model InvestorDistribution {
+  id                   String                      @id @default(cuid())
+  distributionId       String
+  distribution         Distribution                @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  investorId           String
+  investor             Investor                    @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  distributionAmount   Decimal                     @db.Decimal(18, 2)
+  ordinaryIncome       Decimal?                    @db.Decimal(18, 2)
+  longTermCapitalGain  Decimal?                    @db.Decimal(18, 2)
+  shortTermCapitalGain Decimal?                    @db.Decimal(18, 2)
+  returnOfCapital      Decimal?                    @db.Decimal(18, 2)
+  paymentMethod        DistributionPaymentMethod   @default(WIRE)
+  paymentStatus        DistributionPaymentStatus   @default(PENDING)
+  paymentReference     String?
+
+  createdAt            DateTime                    @default(now())
+
+  @@unique([distributionId, investorId])
+  @@index([investorId])
+  @@index([distributionId])
+}
+
+enum TaxDocumentType {
+  K1
+  K3
+  SUMMARY_LETTER
+  FORM_1099_NEC
+  FEE_STATEMENT
+  OTHER
+}
+
+model TaxDocument {
+  id             String           @id @default(cuid())
+  fundId         String
+  taxYear        Int
+  documentType   TaxDocumentType
+  version        Int              @default(1)
+  isAmended      Boolean          @default(false)
+  amendedFromId  String?
+  filePath       String
+  fileSize       Int?
+  fileHash       String?
+  availableDate  DateTime?
+  expiryDate     DateTime?
+
+  createdAt      DateTime         @default(now())
+
+  investorDocuments InvestorTaxDocument[]
+
+  @@index([fundId])
+  @@index([taxYear])
+  @@index([documentType])
+  @@index([availableDate])
+}
+
+model InvestorTaxDocument {
+  id               String       @id @default(cuid())
+  taxDocId         String
+  taxDocument      TaxDocument  @relation(fields: [taxDocId], references: [id], onDelete: Cascade)
+  investorId       String
+  investor         Investor     @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  downloadCount    Int          @default(0)
+  lastDownloadDate DateTime?
+  viewedDate       DateTime?
+
+  createdAt        DateTime     @default(now())
+
+  @@unique([taxDocId, investorId])
+  @@index([investorId])
+  @@index([taxDocId])
+}
+
+enum BankAccountType {
+  CHECKING
+  SAVINGS
+  WIRE
+  INTERNATIONAL
+}
+
+enum VerificationMethod {
+  PLAID
+  MICRO_DEPOSITS
+  DOCUMENT
+}
+
+model InvestorBankAccount {
+  id                       String              @id @default(cuid())
+  investorId               String
+  investor                 Investor            @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  accountNickname          String?
+  accountType              BankAccountType
+  accountHolderName        String
+  bankName                 String?
+  routingNumber            String?             // Encrypted
+  accountNumber            String?             // Encrypted
+  accountNumberMasked      String?
+  accountCountry           String              @default("US")
+  swiftCode                String?
+  iban                     String?
+  isVerified               Boolean             @default(false)
+  verificationMethod       VerificationMethod  @default(MICRO_DEPOSITS)
+  verificationCompleteDate DateTime?
+  isPrimary                Boolean             @default(false)
+  isActive                 Boolean             @default(true)
+  deletedDate              DateTime?
+
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  verification             BankAccountVerification?
+
+  @@index([investorId])
+  @@index([isPrimary])
+  @@index([isVerified])
+}
+
+model BankAccountVerification {
+  id                  String              @id @default(cuid())
+  bankAccountId       String              @unique
+  bankAccount         InvestorBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  deposit1Amount      Decimal?            @db.Decimal(10, 2)
+  deposit1Date        DateTime?
+  deposit2Amount      Decimal?            @db.Decimal(10, 2)
+  deposit2Date        DateTime?
+  verificationAttempts Int                @default(0)
+  verifiedDate        DateTime?
+
+  createdAt           DateTime            @default(now())
+
+  @@index([bankAccountId])
+}
+
+enum NotificationFrequency {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum DocumentDeliveryMethod {
+  EMAIL
+  PORTAL
+  BOTH
+}
+
+model InvestorCommunicationPreference {
+  id                         String                  @id @default(cuid())
+  investorId                 String                  @unique
+  investor                   Investor                @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  emailCapitalCalls          Boolean                 @default(true)
+  emailDistributions         Boolean                 @default(true)
+  emailTaxDocuments          Boolean                 @default(true)
+  emailAnnouncements         Boolean                 @default(true)
+  emailNewsletters           Boolean                 @default(true)
+  smsAlerts                  Boolean                 @default(false)
+  notificationFrequency      NotificationFrequency   @default(DAILY)
+  documentDeliveryMethod     DocumentDeliveryMethod  @default(BOTH)
+  marketingCommunications    Boolean                 @default(false)
+  unsubscribeAll             Boolean                 @default(false)
+
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+
+  @@index([investorId])
+}
+
+enum AnnouncementType {
+  CAPITAL_EVENT
+  REGULATORY
+  FUND_NEWS
+  OPERATIONAL
+  EDUCATIONAL
+}
+
+enum AnnouncementCategory {
+  CAPITAL_CALL
+  DISTRIBUTION
+  PORTFOLIO_UPDATE
+  FEE_CHANGE
+  MEETING
+  OTHER
+}
+
+model InvestorAnnouncement {
+  id              String                @id @default(cuid())
+  fundId          String?
+  title           String
+  content         String                @db.Text
+  announcementType AnnouncementType
+  category        AnnouncementCategory
+  publishedDate   DateTime              @default(now())
+  expiresDate     DateTime?
+  isArchived      Boolean               @default(false)
+  attachmentUrls  String[]
+  createdBy       String?
+
+  createdAt       DateTime              @default(now())
+
+  @@index([fundId])
+  @@index([publishedDate])
+}
+
+enum SupportTicketCategory {
+  TECHNICAL
+  ACCOUNT
+  DOCUMENT
+  PAYMENT
+  GENERAL
+  OTHER
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+model InvestorSupportTicket {
+  id                 String                  @id @default(cuid())
+  ticketNumber       String                  @unique
+  investorId         String
+  investor           Investor                @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  subject            String
+  description        String                  @db.Text
+  category           SupportTicketCategory
+  priority           SupportTicketPriority   @default(MEDIUM)
+  status             SupportTicketStatus     @default(OPEN)
+  assignedTo         String?
+  resolvedDate       DateTime?
+  resolutionSummary  String?                 @db.Text
+  satisfactionRating Int?
+
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([investorId])
+  @@index([ticketNumber])
+  @@index([status])
+}
+
+model FundPerformanceMetric {
+  id                    String   @id @default(cuid())
+  fundId                String
+  asOfDate              DateTime
+  navPerUnit            Decimal? @db.Decimal(18, 6)
+  netIrr                Decimal? @db.Decimal(8, 4)
+  moic                  Decimal? @db.Decimal(10, 4)
+  dpi                   Decimal? @db.Decimal(10, 4)
+  ppi                   Decimal? @db.Decimal(10, 4)
+  totalValueInvested    Decimal? @db.Decimal(18, 2)
+  currentNav            Decimal? @db.Decimal(18, 2)
+  distributionsPaid     Decimal? @db.Decimal(18, 2)
+  totalReturnPercentage Decimal? @db.Decimal(10, 4)
+  ytdReturnPercentage   Decimal? @db.Decimal(10, 4)
+  benchmarkComparison   Decimal? @db.Decimal(10, 4)
+  volatility            Decimal? @db.Decimal(10, 4)
+  sharpeRatio           Decimal? @db.Decimal(10, 4)
+  maxDrawdown           Decimal? @db.Decimal(10, 4)
+
+  createdAt             DateTime @default(now())
+
+  @@unique([fundId, asOfDate])
+  @@index([fundId])
+  @@index([asOfDate])
+}
+
+model InvestorPerformanceSnapshot {
+  id                  String   @id @default(cuid())
+  investorId          String
+  investor            Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  fundId              String
+  asOfDate            DateTime
+  commitmentAmount    Decimal? @db.Decimal(18, 2)
+  fundedAmount        Decimal? @db.Decimal(18, 2)
+  currentValue        Decimal? @db.Decimal(18, 2)
+  distributionsReceived Decimal? @db.Decimal(18, 2)
+  grossReturn         Decimal? @db.Decimal(18, 2)
+  netReturn           Decimal? @db.Decimal(18, 2)
+  irr                 Decimal? @db.Decimal(8, 4)
+  moic                Decimal? @db.Decimal(10, 4)
+
+  createdAt           DateTime @default(now())
+
+  @@unique([investorId, fundId, asOfDate])
+  @@index([investorId])
+  @@index([asOfDate])
+}
+
+model InvestorAuditLog {
+  id         String   @id @default(cuid())
+  investorId String
+  investor   Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  action     String
+  oldValues  Json?
+  newValues  Json?
+  changedBy  String?
+  changedDate DateTime @default(now())
+  ipAddress  String?
+  userAgent  String?  @db.Text
+
+  @@index([investorId])
+  @@index([changedDate])
+}
+
+enum ResourceType {
+  TAX_DOCUMENT
+  PERFORMANCE_REPORT
+  CAPITAL_CALL
+  DISTRIBUTION
+  ACCOUNT_SETTINGS
+  OTHER
+}
+
+enum AccessStatus {
+  SUCCESS
+  DENIED
+  FAILED
+}
+
+model InvestorAccessAuditLog {
+  id              String        @id @default(cuid())
+  investorId      String
+  investor        Investor      @relation(fields: [investorId], references: [id], onDelete: Cascade)
+
+  action          String
+  resourceType    ResourceType?
+  resourceId      String?
+  ipAddress       String?
+  userAgent       String?       @db.Text
+  deviceFingerprint String?
+  accessedDate    DateTime      @default(now())
+  status          AccessStatus  @default(SUCCESS)
+  failureReason   String?
+
+  @@index([investorId])
+  @@index([accessedDate])
+  @@index([resourceType])
 }

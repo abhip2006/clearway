@@ -1,0 +1,73 @@
+{
+  "server": {
+    "port": 3000,
+    "environment": "development"
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "clearway_portfolio",
+    "username": "${DB_USERNAME}",
+    "password": "${DB_PASSWORD}",
+    "pool": {
+      "min": 2,
+      "max": 10
+    }
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "password": "${REDIS_PASSWORD}",
+    "db": 0
+  },
+  "integrations": {
+    "blackDiamond": {
+      "clientId": "${BLACK_DIAMOND_CLIENT_ID}",
+      "clientSecret": "${BLACK_DIAMOND_CLIENT_SECRET}",
+      "redirectUri": "${BASE_URL}/api/v1/portfolio-connections/callback/black-diamond",
+      "apiBaseUrl": "https://api.blackdiamond.com/v1",
+      "oauthBaseUrl": "https://oauth.blackdiamond.com"
+    },
+    "orion": {
+      "apiBaseUrl": "https://api.orion.com/v1",
+      "defaultEnvironment": "production"
+    },
+    "addepar": {
+      "clientId": "${ADDEPAR_CLIENT_ID}",
+      "clientSecret": "${ADDEPAR_CLIENT_SECRET}",
+      "redirectUri": "${BASE_URL}/api/v1/portfolio-connections/callback/addepar",
+      "apiBaseUrl": "https://api.addepar.com/v1",
+      "oauthBaseUrl": "https://oauth.addepar.com"
+    }
+  },
+  "sync": {
+    "defaultFrequencyMinutes": 360,
+    "maxRetries": 3,
+    "retryBackoffMultiplier": 2,
+    "batchSize": 1000,
+    "timeoutMs": 30000
+  },
+  "encryption": {
+    "algorithm": "aes-256-gcm",
+    "keyPath": "${ENCRYPTION_KEY_PATH}"
+  },
+  "monitoring": {
+    "prometheus": {
+      "enabled": true,
+      "port": 9090,
+      "path": "/metrics"
+    },
+    "logging": {
+      "level": "info",
+      "format": "json"
+    }
+  },
+  "security": {
+    "jwtSecret": "${JWT_SECRET}",
+    "jwtExpiresIn": "24h",
+    "cors": {
+      "origin": ["http://localhost:3000", "https://clearway.app"],
+      "credentials": true
+    }
+  }
+}
